@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitStream</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <header>
+        <div class="logo">BitStream</div>
+        <nav>
+            <ul>
+                <li><a href="#" onclick="showPage('home')" id="fetchVideosBtn">Home</a></li>
+                <li><a href="#" onclick="showPage('my-videos')" id="fetchVideosBtnUnlocked"> My Videos</a></li>
+                <li><a href="#" onclick="showPage('upload-video')">Upload Video</a></li>
+                <li><a href="#" onclick="showPage('wallet')">Wallet</a></li>
+                <li><a href="#" >Availavle points:  <p><span id="current-balance"> points</span></p></a></li>
+            </ul>
+        </nav>
+        <button id="connect-wallet">Connect Wallet</button>
+    </header>
+
+    <main>
+        <!-- Home Page -->
+        <section id="home" class="page active">
+            <h1>Home Videos</h1>
+            <div id="videosList" class="video-container">
+
+                <div class="video-grid" id="uploaded-video-grid">
+                    <!-- Uploaded videos will be dynamically added here -->
+                </div>
+            </div>
+
+
+        </section>
+        <!-- My Videos Page -->
+        <section id="my-videos" class="page hidden">
+            <h3>My Library</h3>
+            <div id="videosList-unlocked" class="video-container-unlocked">
+                <div class="video-grid-unlocked" id="uploaded-video-grid-unlocked"></div>
+                <!-- Uploaded videos will be dynamically added here -->
+            </div>
+            </div>
+        </section>
+        <!-- Video Detail Page -->
+        <section id="video-detail" class="page hidden">
+            <h1 id="video-title">Video Title</h1>
+            <div class="video-player-container">
+                <video id="videoPlayer" controls>
+                    <source id="video-source" src="" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            <p id="video-description">Description of the video goes here.</p>
+        </section>
+
+        <!-- Upload Video Page -->
+        <section id="upload-video" class="page hidden">
+            <h2>Upload Your Video</h2>
+            <form id="upload-form" enctype="multipart/form-data">
+                <label for="video-file">Choose a video file:</label>
+                <input type="file" id="video-file" name="videoFile" accept="video/*" required>
+
+                <label for="video-title-input">Video Title:</label>
+                <input type="text" id="video-title-input" name="title" placeholder="Enter the title" required>
+
+                <label for="video-description-input">Description:</label>
+                <textarea id="video-description-input" name="description" placeholder="Describe your video"
+                    required></textarea>
+
+                <button id="uploadVideoBtn" type="submit">Upload Video</button>
+            </form>
+            <div id="upload-status"></div>
+
+        </section>
+
+        <!-- Wallet Section -->
+        <section id="wallet" class="page hidden">
+            <h1>Wallet</h1>
+            <p>Boost your balance and unlock more content!</p>
+            <div class="credits-container">
+                <div class="info">
+                    <p><strong>1000 points = 0.001 ETH</strong></p>
+                    <p>Your Balance: <span id="current-balance">0 points</span></p>
+                    <p>ETH Balance: <span id="wallet-eth-balance">0 ETH</span></p>
+                </div>
+                <div class="input-container">
+                    <label for="credits-amount">Enter Ether amount:</label>
+                    <input type="number" id="credits-amount" min="1" placeholder="min 0.001 Eth">
+                </div>
+                <button id="buy-credits-button" class="buyBalanceBtn">Buy Credits</button>
+            </div>
+        </section>
+        <style>
+            --color: #51eaea, #fffde1, #ff9d76, #FB3569;
+          
+            @grid: 30x1 / 100vw 100vh / #270f34; 
+            
+            :container {
+              perspective: 30vmin;
+              --deg: @p(-180deg, 180deg);
+            }
+            
+            :after, :before {
+              content: '';
+              background: @p(--color); 
+              @place: @r(100%) @r(100%);
+              @size: @r(6px);
+              @shape: heart;
+            }
+          
+            @place: center;
+            @size: 18vmin; 
+          
+            box-shadow: @m2(0 0 50px @p(--color));
+            background: @m100(
+              radial-gradient(@p(--color) 50%, transparent 0) 
+              @r(-20%, 120%) @r(-20%, 100%) / 1px 1px
+              no-repeat
+            );
+          
+            will-change: transform, opacity;
+            animation: scale-up 12s linear infinite;
+            animation-delay: calc(-12s / @I * @i);
+          
+            @keyframes scale-up {
+              0%, 95.01%, 100% {
+                transform: translateZ(0) rotate(0);
+                opacity: 0;
+              }
+              10% { 
+                opacity: 1; 
+              }
+              95% {
+                transform: 
+                  translateZ(35vmin) rotateZ(var(--deg));
+              }
+            }
+          </style>
+    </main>
+
+    <!--<script src="script.js"></script>-->
+
+    <script src="https://cdn.jsdelivr.net/gh/ethereum/web3.js@1.0.0-beta.36/dist/web3.min.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', async () => {
+            const pointsPerEth = 100000; // 1 ETH = 1,000,000 points
+            let web3;
+            let contract;
+            let userAccount;
+
+            const contractABI = [
+                {
+                    "inputs": [],
+                    "name": "buyBalance",
+                    "outputs": [],
+                    "stateMutability": "payable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "videoNumber",
+                            "type": "uint256"
+                        }
+                    ],
+                    "name": "buyVideo",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "renounceOwnership",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "address payable",
+                            "name": "_recipient",
+                            "type": "address"
+                        }
+                    ],
+                    "stateMutability": "nonpayable",
+                    "type": "constructor"
+                },
+                {
+                    "anonymous": false,
+                    "inputs": [
+                        {
+                            "indexed": true,
+                            "internalType": "address",
+                            "name": "previousOwner",
+                            "type": "address"
+                        },
+                        {
+                            "indexed": true,
+                            "internalType": "address",
+                            "name": "newOwner",
+                            "type": "address"
+                        }
+                    ],
+                    "name": "OwnershipTransferred",
+                    "type": "event"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "address",
+                            "name": "newOwner",
+                            "type": "address"
+                        }
+                    ],
+                    "name": "transferOwnership",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "string",
+                            "name": "_title",
+                            "type": "string"
+                        },
+                        {
+                            "internalType": "string",
+                            "name": "_description",
+                            "type": "string"
+                        }
+                    ],
+                    "name": "uploadVideo",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "anonymous": false,
+                    "inputs": [
+                        {
+                            "indexed": false,
+                            "internalType": "uint256",
+                            "name": "videoId",
+                            "type": "uint256"
+                        },
+                        {
+                            "indexed": false,
+                            "internalType": "address",
+                            "name": "buyer",
+                            "type": "address"
+                        },
+                        {
+                            "indexed": false,
+                            "internalType": "string",
+                            "name": "message",
+                            "type": "string"
+                        }
+                    ],
+                    "name": "VideoPurchased",
+                    "type": "event"
+                },
+                {
+                    "anonymous": false,
+                    "inputs": [
+                        {
+                            "indexed": false,
+                            "internalType": "uint256",
+                            "name": "id",
+                            "type": "uint256"
+                        },
+                        {
+                            "indexed": false,
+                            "internalType": "string",
+                            "name": "title",
+                            "type": "string"
+                        },
+                        {
+                            "indexed": false,
+                            "internalType": "string",
+                            "name": "_description",
+                            "type": "string"
+                        }
+                    ],
+                    "name": "VideoUploaded",
+                    "type": "event"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "address",
+                            "name": "",
+                            "type": "address"
+                        }
+                    ],
+                    "name": "balances",
+                    "outputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "COST",
+                    "outputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "videoNumber",
+                            "type": "uint256"
+                        }
+                    ],
+                    "name": "getAccessList",
+                    "outputs": [
+                        {
+                            "internalType": "address[]",
+                            "name": "",
+                            "type": "address[]"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "_id",
+                            "type": "uint256"
+                        }
+                    ],
+                    "name": "getVideo",
+                    "outputs": [
+                        {
+                            "components": [
+                                {
+                                    "internalType": "uint256",
+                                    "name": "id",
+                                    "type": "uint256"
+                                },
+                                {
+                                    "internalType": "string",
+                                    "name": "title",
+                                    "type": "string"
+                                },
+                                {
+                                    "internalType": "string",
+                                    "name": "url",
+                                    "type": "string"
+                                }
+                            ],
+                            "internalType": "struct StreamingService.Video",
+                            "name": "",
+                            "type": "tuple"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "address",
+                            "name": "_addr",
+                            "type": "address"
+                        }
+                    ],
+                    "name": "getVideosByAddress",
+                    "outputs": [
+                        {
+                            "internalType": "uint256[]",
+                            "name": "",
+                            "type": "uint256[]"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "isOwner",
+                    "outputs": [
+                        {
+                            "internalType": "bool",
+                            "name": "",
+                            "type": "bool"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "name": "LockUnlockVideos",
+                    "outputs": [
+                        {
+                            "internalType": "address",
+                            "name": "owner",
+                            "type": "address"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "owner",
+                    "outputs": [
+                        {
+                            "internalType": "address",
+                            "name": "",
+                            "type": "address"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "recipient",
+                    "outputs": [
+                        {
+                            "internalType": "address payable",
+                            "name": "",
+                            "type": "address"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "REWARD",
+                    "outputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "address",
+                            "name": "",
+                            "type": "address"
+                        }
+                    ],
+                    "name": "UploadByOwner",
+                    "outputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [],
+                    "name": "videoCount",
+                    "outputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "name": "videos",
+                    "outputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "id",
+                            "type": "uint256"
+                        },
+                        {
+                            "internalType": "string",
+                            "name": "title",
+                            "type": "string"
+                        },
+                        {
+                            "internalType": "string",
+                            "name": "url",
+                            "type": "string"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "address",
+                            "name": "",
+                            "type": "address"
+                        },
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "name": "videosByAddress",
+                    "outputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                }
+            ]
+            const contractAddress = '0xCccDd2971387495312672B4E0bCC562CD3b1F2c0'; // Replace with your contract address
+
+            // Initialize Web3
+            const initWeb3 = async () => {
+                if (window.ethereum) {
+                    web3 = new Web3(window.ethereum);
+                    try {
+                        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                        userAccount = accounts[0];
+                        console.log('Wallet connected:', userAccount);
+                        await initContract();
+                        await getEthBalance();
+                        updateProfile();
+                    } catch (error) {
+                        console.error('Failed to connect wallet:', error);
+                    }
+                } else {
+                    alert('Please install MetaMask!');
+                }
+            };
+
+            // Initialize the contract
+            const initContract = () => {
+                contract = new web3.eth.Contract(contractABI, contractAddress);
+                console.log('Contract initialized');
+            };
+
+            // Get ETH balance
+            const getEthBalance = async () => {
+                try {
+                    const balanceWei = await web3.eth.getBalance(userAccount);
+                    const balanceEth = web3.utils.fromWei(balanceWei, 'ether');
+                    document.getElementById('wallet-eth-balance').textContent = `${balanceEth} ETH`;
+                    updateCreditsBalance(balanceEth);
+                } catch (error) {
+                    console.error('Error fetching ETH balance:', error);
+                }
+            };
+
+            // Update credits balance
+            const updateCreditsBalance = async (ethBalance) => {
+                //const pointsBalance = ethBalance * pointsPerEth;
+                const balance = await contract.methods.balances(userAccount).call();
+                document.getElementById('current-balance').textContent = `${balance} points`;
+            };
+
+            // Update profile section
+            const updateProfile = async () => {
+                document.getElementById('profile-username').textContent = 'YourUsername'; // Update with actual username logic if available
+                document.getElementById('profile-wallet-address').textContent = userAccount;
+
+                // Fetch video history from contract (example)
+                try {
+                    const videoHistory = await contract.methods.getUserVideoHistory(userAccount).call();
+                    const historyList = document.getElementById('video-history-list');
+                    historyList.innerHTML = ''; // Clear existing list
+                    videoHistory.forEach(video => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = video.title; // Assuming video object has a title property
+                        historyList.appendChild(listItem);
+                    });
+                } catch (error) {
+                    console.error('Error fetching video history:', error);
+                }
+            };
+            // Fetch and display user's uploaded videos
+            const fetchUploadedVideos = async () => {
+                try {
+                    const uploadedVideoIds = await contract.methods.getUploadedVideosByUser(userAccount).call();
+
+                    // Fetch video metadata from the server or contract
+                    const uploadedVideos = await fetchVideosFromServerOrContract(uploadedVideoIds);
+
+                    const uploadedVideosList = document.getElementById('my-uploaded-videos-list');
+                    uploadedVideosList.innerHTML = ''; // Clear the list
+
+                    uploadedVideos.forEach(video => {
+                        const videoElement = document.createElement('div');
+                        videoElement.classList.add('video-item');
+                        videoElement.innerHTML = `
+                <h3>${video.title}</h3>
+                <video controls>
+                    <source src="${video.videoPath}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            `;
+                        uploadedVideosList.appendChild(videoElement);
+                    });
+                } catch (error) {
+                    console.error('Error fetching uploaded videos:', error);
+                }
+            };
+
+            // Fetch and display user's purchased videos
+            const fetchPurchasedVideos = async () => {
+                try {
+                    const purchasedVideoIds = await contract.methods.getPurchasedVideosByUser(userAccount).call();
+
+                    // Fetch video metadata from the server or contract
+                    const purchasedVideos = await fetchVideosFromServerOrContract(purchasedVideoIds);
+
+                    const purchasedVideosList = document.getElementById('my-purchased-videos-list');
+                    purchasedVideosList.innerHTML = ''; // Clear the list
+
+                    purchasedVideos.forEach(video => {
+                        const videoElement = document.createElement('div');
+                        videoElement.classList.add('video-item');
+                        videoElement.innerHTML = `
+                <h3>${video.title}</h3>
+                <video controls>
+                    <source src="${video.videoPath}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            `;
+                        purchasedVideosList.appendChild(videoElement);
+                    });
+                } catch (error) {
+                    console.error('Error fetching purchased videos:', error);
+                }
+            };
+
+            // Call these functions when the "My Videos" page is displayed
+            document.getElementById('my-videos').addEventListener('click', async () => {
+                await fetchUploadedVideos();
+                await fetchPurchasedVideos();
+            });
+
+            // Helper function to fetch video metadata
+            const fetchVideosFromServerOrContract = async (videoIds) => {
+                const videos = [];
+
+                for (const videoId of videoIds) {
+                    // Fetch the video metadata from your server or contract
+                    const video = await contract.methods.getVideo(videoId).call();
+                    videos.push({
+                        title: video.title,
+                        videoPath: video.videoPath,  // URL to the video
+                    });
+                }
+
+                return videos;
+            };
+
+            // Handle buy credits button
+            document.getElementById('buy-credits-button').addEventListener('click', async () => {
+                let creditsAmount = document.getElementById('credits-amount').value;
+                if (creditsAmount && creditsAmount > 0) {
+
+                    const amount = web3.utils.toWei(creditsAmount, 'ether');  // Adjust the amount if needed
+                    try {
+                        await contract.methods.buyBalance().send({ from: userAccount, value: amount });
+                        alert('Balance topped up successfully!');
+                    } catch (error) {
+                        console.error('Error buying balance:', error);
+                    }
+                } else {
+                    alert('Please enter a valid credits amount.');
+                }
+            });
+
+            // Connect Wallet button
+            document.getElementById('connect-wallet').addEventListener('click', async () => {
+                await initWeb3();
+            });
+
+            // Load video into video player
+            window.loadVideo = async (videoUrl, title) => {
+                const videoPlayer = document.getElementById('videoPlayer');
+                const videoSource = document.getElementById('video-source');
+                const videoTitle = document.getElementById('video-title');
+                const videoDescription = document.getElementById('video-description');
+
+                videoSource.src = videoUrl;
+                videoTitle.textContent = title;
+                videoPlayer.load();
+                showPage('video-detail');
+
+                // Load video details from contract (example)
+                try {
+                    const videoId = 1; // Example video ID
+                    const video = await contract.methods.getVideo(videoId).call();
+                    videoDescription.textContent = video.description; // Assuming video has a description field
+                } catch (error) {
+                    console.error('Error loading video details:', error);
+                }
+            };
+
+            // Show a specific page
+            window.showPage = (pageId) => {
+                document.querySelectorAll('.page').forEach(page => {
+                    if (page.id === pageId) {
+                        page.classList.remove('hidden');
+                        page.classList.add('active');
+                    } else {
+                        page.classList.remove('active');
+                        page.classList.add('hidden');
+                    }
+                });
+            };
+
+
+
+            // Handle video upload form submission
+            const uploadForm = document.getElementById('upload-form');
+            const uploadStatus = document.getElementById('upload-status');
+
+            uploadForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const fileInput = document.getElementById('video-file');
+                const videoTitle = document.getElementById('video-title-input').value;
+                const videoDescription = document.getElementById('video-description-input').value;
+
+                if (fileInput.files.length === 0) {
+                    alert('Please select a video file to upload.');
+                    return;
+                }
+
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('videoFile', file); // Use 'videoFile' as the key
+                formData.append('title', videoTitle);
+                formData.append('description', videoDescription);
+
+                try {
+                    // Make an HTTP POST request to your backend (e.g., /upload-video endpoint)
+                    await contract.methods.uploadVideo(videoTitle, "no url").send({ from: userAccount });
+                    alert('Video uploaded successfully!');
+                    const response = await fetch('/upload-video', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        uploadStatus.textContent = `Video uploaded successfully!`;
+                    } else {
+                        uploadStatus.textContent = 'Error uploading video.';
+                    }
+                } catch (error) {
+                    console.error('Error uploading video:', error);
+                    uploadStatus.textContent = 'Failed to upload video.';
+                }
+            });
+
+
+            const API_URL = 'http://localhost:3000/all-video';
+
+            // Event listener for button click
+            document.getElementById('fetchVideosBtn').addEventListener('click', async () => {
+                try {
+                    // Fetch videos from the server
+                    const response = await fetch(API_URL);
+                    const videos = await response.json();
+                    //console.log(videos);
+                    // Clear any existing videos in the list
+                    const videoList = document.getElementById('videosList');
+                    videoList.innerHTML = '';
+
+                    // Loop through the videos and display each one
+                    videos.forEach(video => {
+                        const videoElement = document.createElement('div');
+                        videoElement.classList.add('video-item');
+                        videoElement.setAttribute('data-video-id', video.number);  // Set video id
+                        videoElement.innerHTML = `
+<div style="background-color: #1e1e1e; border-radius: 12px; padding: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6); margin: 10px; flex: 1 1 calc(30% - 20px); max-width: calc(30% - 20px;">
+    <h3 style="color: #ff4081; font-size: 18px; margin-bottom: 5px; text-align: center;">${video.title}</h3>
+    <video id="video-${video.number}" width="100%" height="auto" style="border-radius: 8px; background-color: #000; margin-bottom: 10px;" controls>
+        <source src="${video.videoPath}" type="video/mp4">
+    </video>
+</div>
+    </video>
+    <button class="play-video-btn" data-video-id="${video.number}" 
+            style="background-color: #ff4081; color: #ffffff; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 16px; transition: background-color 0.3s ease, transform 0.3s ease; display: block; margin: 0 auto;">
+        Play Video
+    </button>
+</div>
+            `;
+
+                        // Add click event listener to get the video number
+                        // Add click event to the video element
+                        videoElement.querySelector('.play-video-btn').addEventListener('click', (e) => {
+                            e.preventDefault();
+                            const videoId = videoElement.getAttribute('data-video-id');
+                            //alert(videoId);
+                            handleVideoClick(videoElement, videoId);  // Call function to handle the click event
+                        });
+
+                        videoList.appendChild(videoElement);
+                    });
+                } catch (error) {
+                    console.error('Error fetching videos:', error);
+                }
+            });
+
+            // Function to handle the video click event
+
+            async function handleVideoClick(videoElement, videoIdd) {
+                // Just to verify the video id when clicked
+                alert(`You clicked on Video ${videoIdd}`);
+
+                try {
+
+                    const accessList = await contract.methods.getAccessList(videoIdd).call();
+                    //const accessList = await contract.getAccessList(videoId);
+                    //console.log('Access List for Video:', accessList);
+                    let hlo = accessList.toString().toLowerCase();
+                    userAccount = userAccount.toLowerCase();
+                    const hasAccess = hlo.includes(userAccount);
+                    //console.log(hasAccess);
+                    const video = document.getElementById(`video-${videoIdd}`);
+                    if (hasAccess) {
+                        alert(`You already have access to Video ${videoIdd}`);
+                        video.setAttribute('controls', true);  // Remove the disabled attribute to enable play button
+                        //video.play();
+                    } else {
+                        // Prompt the user to buy the video
+                        const confirmPurchase = confirm(`You don't have access to Video ${videoIdd}. Do you want to buy it?`);
+                        if (confirmPurchase) {
+                            await buyVideo(videoIdd);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking access or buying video:', error);
+                }
+            }
+
+
+
+            // Function to buy the video
+            async function buyVideo(videoId) {
+                try {
+                    const tx = await contract.methods.buyVideo(videoId).send({ from: userAccount });
+                    alert(`Video ${videoId} purchased successfully!`);
+                    const video = document.getElementById(`video-${videoId}`);
+                    video.removeAttribute('disabled');
+                    video.play();
+                } catch (error) {
+                    console.error('Error purchasing video:', error);
+                    alert('Error purchasing the video. Please try again.');
+                }
+            }
+
+            document.getElementById('fetchVideosBtnUnlocked').addEventListener('click', async () => {
+                try {
+                    //const userAddress = await signer.getAddress();
+                    const videonumber = await contract.methods.getVideosByAddress(userAccount).call();
+                    //await contract.methods.balances(userAccount).call();
+                    //console.log(videonumber[0]);
+                    // Fetch videos from the server
+                    const response = await fetch(API_URL);
+                    const videos = await response.json();
+                    // Step 1: Convert the smallerArray strings to numbers
+                    const smallerNumbers = videonumber.map(Number);
+
+                    // Step 2: Filter the biggerArray to include only objects with ids present in smallerNumbers
+                    const newArray = videos.filter(obj => smallerNumbers.includes(obj.number));
+                    //console.log(newArray);
+                    // Clear any existing videos in the list
+                    const videoList = document.getElementById('videosList-unlocked');
+                    videoList.innerHTML = '';
+                    newArray.forEach(videohaha => {
+                        const videoElement = document.createElement('div');
+                        videoElement.classList.add('video-item-unlocked');
+                        videoElement.setAttribute('data-video-id-unlocked', videohaha.number); // Set video id
+                        videoElement.innerHTML = `
+<div style="background-color: #1e1e1e; border-radius: 12px; padding: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6); margin: 10px; flex: 1 1 calc(30% - 20px); max-width: calc(30% - 20px;">
+    <h3 style="color: #ff4081; font-size: 18px; margin-bottom: 5px; text-align: center;">${videohaha.title}</h3>
+    <video id="video-${videohaha.number}" width="100%" height="auto" style="border-radius: 8px; background-color: #000; margin-bottom: 10px;" controls>
+        <source src="${videohaha.videoPath}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+</div>
+`;
+                        ;
+                        videoList.appendChild(videoElement);
+
+                    })
+                } catch (error) {
+                    console.error('Error fetching videos:', error);
+                }
+            });
+
+            // Show the home page by default
+            showPage('home');
+        });
+    </script>
+</body>
+
+</html>
